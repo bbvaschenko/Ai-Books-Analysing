@@ -3,15 +3,18 @@ from transformers import AutoTokenizer, AutoModel
 import torch
 import torch.nn.functional as F
 import re
+import os
+import pandas as pd
 
 
+# === МОДЕЛЬ ===
 tokenizer = AutoTokenizer.from_pretrained("ai-forever/sbert_large_nlu_ru")
 model = AutoModel.from_pretrained("ai-forever/sbert_large_nlu_ru")
 model.eval()
 
 
-
-section_tags = [  
+# === ТЕГИ ===
+section_tags = [
     "алгебра", "геометрия", "дифференциальные уравнения", "теория вероятностей",
     "численные методы", "математическая логика", "линейная алгебра", "математический анализ",
     "топология", "механика", "оптика", "термодинамика", "электродинамика",
@@ -42,14 +45,14 @@ section_to_area = {
     "криптография": "информатика"
 }
 
-concept_tags = [  
+concept_tags = [
     "матрица", "интеграл", "дифференциал", "уравнение", "доказательство",
     "логика", "формула", "вектор", "градиент", "предел", "ряды",
     "частная производная", "функция", "оператор", "конвергенция",
     "расходимость", "дисперсия", "среднее значение", "корень", "производная"
 ]
 
-difficulty_tags = [  
+difficulty_tags = [
     "начальный уровень", "средний уровень", "продвинутый уровень", "базовый курс",
     "университетский курс", "магистратура", "аспирантура", "вводный материал",
     "теоретический уровень", "прикладной уровень"
@@ -92,7 +95,7 @@ def get_tags(text_embedding, tag_list, top_k=5):
     tag_embeddings = torch.cat(tag_embeddings)
     similarities = F.cosine_similarity(text_embedding, tag_embeddings)
     top_indices = similarities.topk(top_k).indices
-    return [tag_list[i] for i in top_indices]
+    return sorted([tag_list[i] for i in top_indices])  # отсортировано
 
 def infer_area_from_sections(section_tags_found):
     area_counter = {}
@@ -106,8 +109,24 @@ def infer_area_from_sections(section_tags_found):
         return [sorted_areas[0][0]]
     return ["не определено"]
 
+def get_next_book_number(excel_file):
+    if not os.path.exists(excel_file):
+        return 1
+    df = pd.read_excel(excel_file)
+    if df.empty:
+        return 1
+    return df['Номер книги'].max() + 1
 
-def analyze_pdf(pdf_path):
+def save_to_excel(excel_file, book_data):
+    df = pd.DataFrame([book_data])
+    if os.path.exists(excel_file):
+        existing_df = pd.read_excel(excel_file)
+        df = pd.concat([existing_df, df], ignore_index=True)
+    df.to_excel(excel_file, index=False)
+
+# === ГЛАВНАЯ ФУНКЦИЯ ===
+
+def analyze_pdf(pdf_path, excel_file="analyzed_books.xlsx"):
     print("Извлечение текста из PDF...")
     raw_text = extract_text_from_pdf(pdf_path)
 
@@ -115,7 +134,7 @@ def analyze_pdf(pdf_path):
         print("Недостаточно текста для анализа.")
         return
 
-    print("Генерация эмбеддингов по всему тексту...")
+    print("Генерация эмбеддингов по тексту...")
     text_embedding = extract_embeddings(raw_text)
 
     print("Анализ тегов...")
@@ -124,13 +143,29 @@ def analyze_pdf(pdf_path):
     found_concepts = get_tags(text_embedding, concept_tags, top_k=3)
     found_difficulty = get_tags(text_embedding, difficulty_tags, top_k=2)
 
+    book_number = get_next_book_number(excel_file)
+    book_id = f"{book_number:04d}"
+
+    # Формируем данные
+    book_data = {
+        "Номер книги": book_number,
+        "ID книги": book_id,
+        "Имя файла": os.path.basename(pdf_path),
+        "Область знаний": ', '.join(found_area),
+        "Разделы": ', '.join(found_sections),
+        "Термины": ', '.join(found_concepts),
+        "Сложность": ', '.join(found_difficulty)
+    }
+
     print("\nРезультаты анализа:")
-    print(f"Область знаний: {', '.join(found_area)}")
-    print(f"Разделы: {', '.join(found_sections)}")
-    print(f"Термины и понятия: {', '.join(found_concepts)}")
-    print(f"Сложность материала: {', '.join(found_difficulty)}")
+    for key, value in book_data.items():
+        print(f"{key}: {value}")
+
+    save_to_excel(excel_file, book_data)
+    print(f"\nДанные сохранены в файл: {excel_file}")
 
 
+# === ЗАПУСК ===
 
 if __name__ == "__main__":
-    analyze_pdf("example.pdf")  
+    analyze_pdf("978-5-7996-1779-0_2016.pdf")  # Замените путь на ваш
