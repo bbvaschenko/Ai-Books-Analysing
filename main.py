@@ -6,13 +6,11 @@ import re
 import os
 import pandas as pd
 
-# === МОДЕЛЬ ===
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Embedding-0.6B")
 model = AutoModel.from_pretrained("Qwen/Qwen3-Embedding-0.6B")
 model.eval()
 
 
-# === ФУНКЦИИ ДЛЯ ЗАГРУЗКИ ТЕГОВ ИЗ ФАЙЛОВ ===
 def load_tags_from_files(tags_directory="tags"):
     tags_dict = {}
 
@@ -49,63 +47,6 @@ def load_area_mapping(mapping_file="tags/области_знаний.txt"):
         print(f"Файл с соответствиями {mapping_file} не найден")
 
     return section_to_area
-
-
-# === ФУНКЦИИ ДЛЯ ОПРЕДЕЛЕНИЯ АВТОРА ===
-def extract_author_from_text(text):
-    patterns = [
-        r'Автор[:\s]+([^\n,.]+(?:\s+[^\n,.]+){0,3})',
-        r'Авторы[:\s]+([^\n,.]+(?:\s+[^\n,.]+){0,5})',
-        r'©\s*[^,\n]+\s*,\s*([^,\n]+)',
-        r'[А-Я][а-я]+\s+[А-Я][а-я]+\s+[А-Я][а-я]+',  # ФИО из трех слов
-        r'[А-Я][а-я]+\s+[А-Я]\.[А-Я]\.',  # Имя + инициалы
-    ]
-
-    beginning_text = text[:2000].lower()
-
-    for pattern in patterns:
-        matches = re.findall(pattern, beginning_text, re.IGNORECASE | re.MULTILINE)
-        if matches:
-            author = matches[0].strip()
-            author = re.sub(r'^(автор|авторы|под ред|ред\.|сост\.)\s*[:\-]?\s*', '', author, flags=re.IGNORECASE)
-            if author and len(author) > 3:
-                return author.capitalize()
-
-    return None
-
-
-def extract_author_from_filename(filename):
-    name_without_ext = os.path.splitext(filename)[0]
-
-    patterns = [
-        r'^([^\-]+)\s*-\s*',  # Автор - Название
-        r'^([^_]+)_',  # Автор_Название
-        r'^([^,]+),\s*',  # Автор, Название
-    ]
-
-    for pattern in patterns:
-        match = re.match(pattern, name_without_ext)
-        if match:
-            author = match.group(1).strip()
-            if re.search(r'[а-яa-z]+\s+[а-яa-z]+', author, re.IGNORECASE):
-                return author
-
-    return None
-
-
-def find_author(pdf_path, text):
-    author_from_text = extract_author_from_text(text)
-    if author_from_text:
-        return author_from_text
-
-    filename = os.path.basename(pdf_path)
-    author_from_filename = extract_author_from_filename(filename)
-    if author_from_filename:
-        return author_from_filename
-
-    return "Не определен"
-
-
 # === ОСНОВНЫЕ ФУНКЦИИ ===
 
 def clean_text(text):
@@ -151,7 +92,6 @@ def get_tags(text_embedding, tag_list, top_k=5):
     top_indices = similarities.topk(min(top_k, len(tag_list))).indices
     return sorted([tag_list[i] for i in top_indices])
 
-
 def infer_area_from_sections(section_tags_found, section_to_area):
     area_counter = {}
     for section in section_tags_found:
@@ -185,6 +125,7 @@ def save_to_excel(excel_file, book_data):
 # === ГЛАВНАЯ ФУНКЦИЯ ===
 
 def analyze_pdf(pdf_path, excel_file="analyzed_books.xlsx"):
+    # Загружаем теги из файлов
     tags_dict = load_tags_from_files()
     section_to_area = load_area_mapping()
 
@@ -198,10 +139,6 @@ def analyze_pdf(pdf_path, excel_file="analyzed_books.xlsx"):
     if not raw_text or len(raw_text.strip()) < 200:
         print("Недостаточно текста для анализа.")
         return
-
-    print("Определение автора...")
-    author = find_author(pdf_path, raw_text)
-
     print("Генерация эмбеддингов по тексту...")
     text_embedding = extract_embeddings(raw_text)
 
@@ -224,7 +161,6 @@ def analyze_pdf(pdf_path, excel_file="analyzed_books.xlsx"):
         "Номер книги": book_number,
         "ID книги": book_id,
         "Имя файла": os.path.basename(pdf_path),
-        "Автор": author,
         "Область знаний": ', '.join(found_area),
     }
 
@@ -240,4 +176,4 @@ def analyze_pdf(pdf_path, excel_file="analyzed_books.xlsx"):
     print(f"\nДанные сохранены в файл: {excel_file}")
 
 if __name__ == "__main__":
-    analyze_pdf("besov.pdf")  # Замените путь
+    analyze_pdf("fizika_10kl_gromika_rus_2019.pdf")  # Замените путь
