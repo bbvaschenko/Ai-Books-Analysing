@@ -148,4 +148,4 @@ if __name__ == "__main__":
         else:
             analyze_example_pdf()
     else:
-        main() 
+        main()
