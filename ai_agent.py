@@ -635,7 +635,7 @@ class EducationalAIAgent:
         word_freq = {}
         for word in words:
             if word not in stop_words:
-                word_freq[word] = word_freq.get(word, 0) + 1
+                word_freq[word] = word_freq.get(word, 0) + 1 
 
         # Сортируем по частоте и возвращаем топ-5
         sorted_words = sorted(word_freq.items(), key=lambda x: -x[1])
