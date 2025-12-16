@@ -55,7 +55,7 @@ def main():
         sys.exit(1)
 
     # Токен бота
-    BOT_TOKEN = '8299643533:AAFSCcKODXOm6eI7LT5FMMOFpJqXMfwikko'
+    BOT_TOKEN = 'BOT_TOKEN'
 
     if not BOT_TOKEN or BOT_TOKEN == 'YOUR_BOT_TOKEN_HERE':
         print("\n❌ Укажите действительный токен Telegram бота в файле main.py")
