@@ -1,179 +1,151 @@
-import fitz  # PyMuPDF
-from transformers import AutoTokenizer, AutoModel
-import torch
-import torch.nn.functional as F
-import re
+"""
+Основной файл для запуска проекта
+"""
 import os
-import pandas as pd
-
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-Embedding-0.6B")
-model = AutoModel.from_pretrained("Qwen/Qwen3-Embedding-0.6B")
-model.eval()
+import sys
+from telegram_bot import LibraryBot
 
 
-def load_tags_from_files(tags_directory="tags"):
-    tags_dict = {}
+def check_requirements():
+    """Проверка необходимых директорий и файлов"""
+    # Проверяем наличие директории с тегами
+    if not os.path.exists("tags"):
+        print("⚠️  Директория 'tags' не найдена!")
+        print("Создайте директорию 'tags' и добавьте файлы с тегами:")
+        print("  - разделы.txt")
+        print("  - предметы.txt")
+        print("  - классы.txt")
+        print("  - авторы.txt")
+        print("  - темы.txt")
+        print("  - области_знаний.txt")
+        return False
 
-    if not os.path.exists(tags_directory):
-        os.makedirs(tags_directory)
-        print(f"Создана директория {tags_directory}. Добавьте туда текстовые файлы с тегами.")
-        return tags_dict
+    # Проверяем наличие хотя бы одного файла тегов
+    tag_files = [f for f in os.listdir("tags") if f.endswith(".txt")]
+    if not tag_files:
+        print("⚠️  В директории 'tags' нет файлов с тегами!")
+        return False
 
-    for filename in os.listdir(tags_directory):
-        if filename.endswith(".txt"):
-            category = filename[:-4]  # убираем расширение .txt
-            filepath = os.path.join(tags_directory, filename)
+    print(f"✅ Найдено файлов с тегами: {len(tag_files)}")
 
-            with open(filepath, 'r', encoding='utf-8') as f:
-                tags = [line.strip() for line in f if line.strip()]
-                tags_dict[category] = tags
-                print(f"Загружено {len(tags)} тегов из категории '{category}'")
+    # Создаем директорию для загруженных файлов
+    if not os.path.exists("uploads"):
+        os.makedirs("uploads")
+        print("✅ Создана директория 'uploads' для загруженных файлов")
 
-    return tags_dict
+    # Создаем директорию для логов
+    if not os.path.exists("logs"):
+        os.makedirs("logs")
+        print("✅ Создана директория 'logs'")
+
+    return True
 
 
-def load_area_mapping(mapping_file="tags/области_знаний.txt"):
-    section_to_area = {}
+def main():
+    """Основная функция запуска"""
+    print("=" * 50)
+    print("🏫 Умная библиотека учебников")
+    print("=" * 50)
+    print("📁 Максимальный размер файла: 50MB")
+    print("=" * 50)
 
-    if os.path.exists(mapping_file):
-        with open(mapping_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and ':' in line:
-                    section, area = line.split(':', 1)
-                    section_to_area[section.strip()] = area.strip()
-        print(f"Загружено {len(section_to_area)} соответствий разделов и областей")
+    # Проверяем требования
+    if not check_requirements():
+        print("\n❌ Пожалуйста, настройте проект согласно инструкции выше.")
+        sys.exit(1)
+
+    # Токен бота
+    BOT_TOKEN = '8299643533:AAFSCcKODXOm6eI7LT5FMMOFpJqXMfwikko'
+
+    if not BOT_TOKEN or BOT_TOKEN == 'YOUR_BOT_TOKEN_HERE':
+        print("\n❌ Укажите действительный токен Telegram бота в файле main.py")
+        sys.exit(1)
+
+    # Запускаем бота
+    try:
+        bot = LibraryBot(BOT_TOKEN)
+        bot.start()
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен пользователем")
+    except Exception as e:
+        print(f"\n❌ Критическая ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def analyze_example_pdf():
+    """Функция для тестирования анализа PDF файла"""
+    from library_core import BookAnalyzer
+
+    print("\n🔬 Тестирование анализа PDF...")
+    print("=" * 50)
+
+    analyzer = BookAnalyzer()
+
+    # Пример анализа файла
+    test_pdf = "example.pdf"
+
+    if os.path.exists(test_pdf):
+        print(f"Анализирую файл: {test_pdf}")
+
+        # Проверяем размер файла
+        file_size = os.path.getsize(test_pdf)
+        if file_size > 50 * 1024 * 1024:
+            print(f"❌ Файл слишком большой: {file_size / (1024 * 1024):.1f}MB (максимум 50MB)")
+            return
+
+        book_data = analyzer.analyze_book(test_pdf)
+
+        if book_data:
+            print("\n✅ Анализ завершен успешно!")
+            print(f"ID книги: {book_data.book_id}")
+            print(f"Область знаний: {book_data.area}")
+            print(f"Найденные теги:")
+
+            for category, tags in book_data.tags.items():
+                if tags:
+                    print(f"  {category}: {', '.join(tags)}")
+
+            # Сохраняем в базу
+            analyzer.save_to_database(book_data)
+            print(f"\n💾 Данные сохранены в analyzed_books.xlsx")
+        else:
+            print("❌ Не удалось проанализировать файл")
     else:
-        print(f"Файл с соответствиями {mapping_file} не найден")
+        print(f"❌ Тестовый файл не найден: {test_pdf}")
+        print("\nСоздайте example.pdf или укажите путь к существующему PDF:")
+        print("  python main.py --test /путь/к/файлу.pdf")
 
-    return section_to_area
-# === ОСНОВНЫЕ ФУНКЦИИ ===
-
-def clean_text(text):
-    return re.sub(r'\s+', ' ', text.strip())
-
-
-def extract_text_from_pdf(pdf_path):
-    doc = fitz.open(pdf_path)
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    return clean_text(text)
-
-
-def extract_embeddings(text, chunk_size=512):
-    chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
-    embeddings = []
-
-    for chunk in chunks:
-        inputs = tokenizer(chunk, return_tensors='pt', truncation=True, padding=True, max_length=512)
-        with torch.no_grad():
-            outputs = model(**inputs)
-        emb = outputs.last_hidden_state.mean(dim=1)
-        embeddings.append(emb)
-
-    return torch.mean(torch.stack(embeddings), dim=0)
-
-
-def get_tags(text_embedding, tag_list, top_k=5):
-    if not tag_list:
-        return []
-
-    tag_embeddings = []
-    for tag in tag_list:
-        inputs = tokenizer(tag, return_tensors='pt', truncation=True, padding=True, max_length=10)
-        with torch.no_grad():
-            outputs = model(**inputs)
-        tag_embedding = outputs.last_hidden_state.mean(dim=1)
-        tag_embeddings.append(tag_embedding)
-
-    tag_embeddings = torch.cat(tag_embeddings)
-    similarities = F.cosine_similarity(text_embedding, tag_embeddings)
-    top_indices = similarities.topk(min(top_k, len(tag_list))).indices
-    return sorted([tag_list[i] for i in top_indices])
-
-def infer_area_from_sections(section_tags_found, section_to_area):
-    area_counter = {}
-    for section in section_tags_found:
-        area = section_to_area.get(section)
-        if area:
-            area_counter[area] = area_counter.get(area, 0) + 1
-
-    if area_counter:
-        sorted_areas = sorted(area_counter.items(), key=lambda x: -x[1])
-        return [sorted_areas[0][0]]
-    return ["не определено"]
-
-
-def get_next_book_number(excel_file):
-    if not os.path.exists(excel_file):
-        return 1
-    df = pd.read_excel(excel_file)
-    if df.empty:
-        return 1
-    return df['Номер книги'].max() + 1
-
-
-def save_to_excel(excel_file, book_data):
-    df = pd.DataFrame([book_data])
-    if os.path.exists(excel_file):
-        existing_df = pd.read_excel(excel_file)
-        df = pd.concat([existing_df, df], ignore_index=True)
-    df.to_excel(excel_file, index=False)
-
-
-# === ГЛАВНАЯ ФУНКЦИЯ ===
-
-def analyze_pdf(pdf_path, excel_file="analyzed_books.xlsx"):
-    # Загружаем теги из файлов
-    tags_dict = load_tags_from_files()
-    section_to_area = load_area_mapping()
-
-    if not tags_dict:
-        print("Не найдены файлы с тегами. Создайте директорию 'tags' и добавьте файлы с тегами.")
-        return
-
-    print("Извлечение текста из PDF...")
-    raw_text = extract_text_from_pdf(pdf_path)
-
-    if not raw_text or len(raw_text.strip()) < 200:
-        print("Недостаточно текста для анализа.")
-        return
-    print("Генерация эмбеддингов по тексту...")
-    text_embedding = extract_embeddings(raw_text)
-
-    print("Анализ тегов...")
-
-    found_tags = {}
-    for category, tags in tags_dict.items():
-        if category == "области_знаний":
-            continue
-        found_tags[category] = get_tags(text_embedding, tags, top_k=3)
-        print(f"{category}: {', '.join(found_tags[category])}")
-
-    section_tags = tags_dict.get("разделы", [])
-    found_area = infer_area_from_sections(found_tags.get("разделы", []), section_to_area)
-
-    book_number = get_next_book_number(excel_file)
-    book_id = f"{book_number:04d}"
-
-    book_data = {
-        "Номер книги": book_number,
-        "ID книги": book_id,
-        "Имя файла": os.path.basename(pdf_path),
-        "Область знаний": ', '.join(found_area),
-    }
-
-    for category in tags_dict.keys():
-        if category != "области_знаний":
-            book_data[category.capitalize()] = ', '.join(found_tags.get(category, []))
-
-    print("\nРезультаты анализа:")
-    for key, value in book_data.items():
-        print(f"{key}: {value}")
-
-    save_to_excel(excel_file, book_data)
-    print(f"\nДанные сохранены в файл: {excel_file}")
 
 if __name__ == "__main__":
-    analyze_pdf("fizika_10kl_gromika_rus_2019.pdf")  # Замените путь
+    # Можно запустить в двух режимах:
+    # 1. Режим бота (по умолчанию)
+    # 2. Режим тестирования анализа PDF
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--test":
+        if len(sys.argv) > 2:
+            # Переопределяем путь к тестовому файлу
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+            test_pdf = sys.argv[2]
+            if os.path.exists(test_pdf):
+                from library_core import BookAnalyzer
+
+                print("\n🔬 Тестирование анализа PDF...")
+                print(f"Файл: {test_pdf}")
+
+                analyzer = BookAnalyzer()
+                book_data = analyzer.analyze_book(test_pdf)
+
+                if book_data:
+                    print("\n✅ Анализ завершен успешно!")
+                    analyzer.save_to_database(book_data)
+                else:
+                    print("❌ Не удалось проанализировать файл")
+            else:
+                print(f"❌ Файл не найден: {test_pdf}")
+        else:
+            analyze_example_pdf()
+    else:
+        main()
