@@ -31,6 +31,244 @@ class BookData:
     ai_analysis: Optional[AIBookAnalysis] = None  # Добавляем поле для AI анализа
 
 
+class AutonomousEducationalClassifier:
+    """Автономный классификатор учебной литературы"""
+
+    def __init__(self):
+        """Инициализация автономного классификатора"""
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def _extract_text_features(self, text: str) -> Dict[str, Any]:
+        """Извлечение признаков из текста"""
+        features = {
+            'text_length': len(text),
+            'paragraph_count': len(re.split(r'\n\s*\n', text)),
+            'sentence_count': len(re.split(r'[.!?]+', text)),
+            'avg_sentence_length': 0,
+            'vocabulary_richness': 0
+        }
+
+        if features['sentence_count'] > 0:
+            features['avg_sentence_length'] = len(text) / features['sentence_count']
+
+        # Анализ богатства словарного запаса
+        words = re.findall(r'\b[а-яА-ЯёЁ]{3,}\b', text.lower())
+        if words:
+            unique_words = set(words)
+            features['vocabulary_richness'] = len(unique_words) / len(words) if len(words) > 0 else 0
+
+        return features
+
+    def _analyze_text_structure(self, text: str) -> Dict[str, Any]:
+        """Анализ структуры текста"""
+        structure = {
+            'has_numerical_sections': False,
+            'has_definitions': False,
+            'has_examples': False,
+            'has_exercises': False,
+            'has_references': False,
+            'has_tables_figures': False,
+            'section_hierarchy_depth': 0
+        }
+
+        # Анализ структуры по заголовкам
+        headings = re.findall(r'(?:Глава|Раздел|§|Тема|Параграф|Часть)\s+[^\n]+', text)
+        if headings:
+            structure['has_numerical_sections'] = True
+            structure['section_hierarchy_depth'] = min(3, len(headings) // 2)
+
+        # Поиск определений
+        definition_patterns = [
+            r'Определение\s*[0-9]*[:.]?\s*[^\n]+',
+            r'\bопределим\b.*?как\b',
+            r'\bназывается\b.*?\bесли\b'
+        ]
+        for pattern in definition_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                structure['has_definitions'] = True
+                break
+
+        # Поиск примеров
+        example_patterns = [
+            r'Пример\s*[0-9]*[:.]',
+            r'Рассмотрим\s+пример',
+            r'В\s+качестве\s+примера'
+        ]
+        for pattern in example_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                structure['has_examples'] = True
+                break
+
+        # Поиск упражнений
+        exercise_patterns = [
+            r'Задача\s*[0-9]*[:.]',
+            r'Упражнение\s*[0-9]*[:.]',
+            r'Контрольный\s+вопрос',
+            r'Самостоятельная\s+работа'
+        ]
+        for pattern in exercise_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                structure['has_exercises'] = True
+                break
+
+        # Поиск ссылок
+        reference_patterns = [
+            r'\[[0-9]+\]',
+            r'\([А-Яа-я]+\s*,\s*\d{4}\)',
+            r'Список\s+литературы',
+            r'Библиография'
+        ]
+        for pattern in reference_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                structure['has_references'] = True
+                break
+
+        # Поиск таблиц и рисунков
+        table_figure_patterns = [
+            r'Таблица\s*[0-9]*',
+            r'Рис\.\s*[0-9]*',
+            r'Схема\s*[0-9]*',
+            r'График\s*[0-9]*'
+        ]
+        for pattern in table_figure_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                structure['has_tables_figures'] = True
+                break
+
+        return structure
+
+    def _analyze_mathematical_content(self, text: str) -> Dict[str, Any]:
+        """Анализ математического содержания"""
+        math_analysis = {
+            'has_formulas': False,
+            'has_equations': False,
+            'has_proofs': False,
+            'has_theorems': False,
+            'formula_density': 0,
+            'math_keyword_count': 0
+        }
+
+        # Математические ключевые слова
+        math_keywords = [
+            'уравнение', 'формула', 'теорема', 'доказательство', 'решение',
+            'вычислить', 'рассчитать', 'функция', 'производная', 'интеграл',
+            'матрица', 'вектор', 'вероятность', 'статистика', 'алгоритм'
+        ]
+
+        # Подсчет математических ключевых слов
+        text_lower = text.lower()
+        math_analysis['math_keyword_count'] = sum(
+            1 for keyword in math_keywords if keyword in text_lower
+        )
+
+        # Поиск формул и уравнений
+        formula_patterns = [
+            r'\$[^$]+\$',  # LaTeX
+            r'\\[(\[]?[^\\]*?\\[\])]?',  # Математические выражения
+            r'[A-Za-zА-Яа-яα-ωΑ-Ω]+\s*=\s*[^=\n]{3,}',  # Равенства с содержанием
+            r'\b\w+\s*[+\-*/^=<>≤≥≠]\s*\w+\b',  # Математические операции
+        ]
+
+        formula_count = 0
+        for pattern in formula_patterns:
+            matches = re.findall(pattern, text)
+            formula_count += len(matches)
+            if matches:
+                math_analysis['has_formulas'] = True
+                if '=' in pattern or '≠' in pattern or '≤' in pattern or '≥' in pattern:
+                    math_analysis['has_equations'] = True
+
+        # Рассчитываем плотность формул
+        if len(text) > 0:
+            math_analysis['formula_density'] = formula_count / (len(text) / 1000)
+
+        # Поиск доказательств и теорем
+        proof_theorem_patterns = [
+            r'Теорема\s*[0-9]*[:.]',
+            r'Доказательство\.',
+            r'Лемма\s*[0-9]*[:.]',
+            r'Следствие\s*[0-9]*[:.]',
+            r'докажем\b', r'доказать\b'
+        ]
+
+        for pattern in proof_theorem_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                if 'теорема' in pattern.lower() or 'лемма' in pattern.lower() or 'следствие' in pattern.lower():
+                    math_analysis['has_theorems'] = True
+                if 'доказа' in pattern.lower():
+                    math_analysis['has_proofs'] = True
+
+        return math_analysis
+
+    def check_if_educational(self, text: str) -> Dict[str, Any]:
+        """Проверка, является ли текст учебной литературой"""
+        # Для быстрой проверки анализируем только часть текста
+        if len(text) > 2000:
+            analysis_text = text[:1500]
+        else:
+            analysis_text = text
+
+        # Извлекаем признаки
+        features = self._extract_text_features(analysis_text)
+        structure = self._analyze_text_structure(analysis_text)
+        math_content = self._analyze_mathematical_content(analysis_text)
+
+        # Рассчитываем общий скоринг
+        structural_score = (
+            (1.0 if structure['has_numerical_sections'] else 0) * 0.25 +
+            (1.0 if structure['has_definitions'] else 0) * 0.20 +
+            (1.0 if structure['has_examples'] else 0) * 0.15 +
+            (1.0 if structure['has_exercises'] else 0) * 0.20 +
+            (1.0 if structure['has_references'] else 0) * 0.10 +
+            (1.0 if structure['has_tables_figures'] else 0) * 0.10
+        )
+
+        mathematical_score = (
+            (1.0 if math_content['has_formulas'] else 0) * 0.30 +
+            (1.0 if math_content['has_equations'] else 0) * 0.25 +
+            (1.0 if math_content['has_proofs'] else 0) * 0.15 +
+            (1.0 if math_content['has_theorems'] else 0) * 0.15 +
+            min(1.0, math_content['formula_density'] / 5.0) * 0.15
+        )
+
+        formal_score = min(1.0, features['vocabulary_richness'] * 1.5)
+
+        # Взвешенная итоговая оценка
+        total_score = (
+            structural_score * 0.40 +
+            mathematical_score * 0.35 +
+            formal_score * 0.25
+        )
+
+        # Определяем, является ли учебной литературой
+        is_educational = total_score >= 0.5
+
+        # Генерируем детали
+        details = []
+        if structure['has_numerical_sections']:
+            details.append("имеет структурированные разделы")
+        if structure['has_definitions']:
+            details.append("содержит определения терминов")
+        if structure['has_exercises']:
+            details.append("включает упражнения и задачи")
+        if math_content['has_formulas']:
+            details.append("содержит математические формулы")
+
+        if len(details) == 0:
+            details.append("не обнаружено характерных признаков учебника")
+
+        return {
+            'is_educational': is_educational,
+            'confidence': round(total_score, 2),
+            'total_score': round(total_score, 2),
+            'structural_score': round(structural_score, 2),
+            'mathematical_score': round(mathematical_score, 2),
+            'formal_score': round(formal_score, 2),
+            'details': details[:3],
+            'recommendation': '✅ Рекомендуется для библиотеки' if is_educational else '❌ Не является учебной литературой'
+        }
+
+
 class PDFProcessor:
     """Класс для обработки PDF файлов"""
 
@@ -233,6 +471,9 @@ class BookAnalyzer:
         self.embedding_model = EmbeddingModel()
         self.pdf_processor = PDFProcessor()
 
+        # Инициализация автономного классификатора учебной литературы
+        self.educational_checker = AutonomousEducationalClassifier()
+
         # Инициализация AI агента
         print("Инициализация AI агента для расширенного анализа...")
         self.ai_agent = EducationalAIAgent()
@@ -277,6 +518,24 @@ class BookAnalyzer:
         if not self.pdf_processor.validate_text(raw_text):
             print("Недостаточно текста для анализа.")
             return None
+
+        # 🔍 АВТОНОМНАЯ ПРОВЕРКА НА УЧЕБНУЮ ЛИТЕРАТУРУ
+        print("🔍 Автономная проверка на учебную литературу...")
+        educational_check = self.educational_checker.check_if_educational(raw_text)
+
+        print(f"   Оценка учебности: {educational_check['total_score']:.2f}")
+        print(f"   Структурный скор: {educational_check['structural_score']:.2f}")
+        print(f"   Математический скор: {educational_check['mathematical_score']:.2f}")
+        print(f"   Формальность: {educational_check['formal_score']:.2f}")
+
+        if not educational_check['is_educational']:
+            print(f"❌ Файл не является учебной литературой!")
+            print(f"   Причина: {educational_check['recommendation']}")
+            print(f"   Детали: {', '.join(educational_check['details'])}")
+            return None
+
+        print(f"✅ Автономная проверка пройдена успешно")
+        print(f"   Рекомендация: {educational_check['recommendation']}")
 
         # Генерация эмбеддингов
         print("Генерация эмбеддингов по тексту...")
