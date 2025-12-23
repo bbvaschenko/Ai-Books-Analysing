@@ -1,5 +1,6 @@
 """
 Основной файл для запуска проекта
+Только режим с системой агентов
 """
 import os
 import sys
@@ -33,10 +34,13 @@ def check_requirements():
         os.makedirs("uploads")
         print("✅ Создана директория 'uploads' для загруженных файлов")
 
-    # Создаем директорию для логов
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
-        print("✅ Создана директория 'logs'")
+    # Проверяем наличие GigaChat API ключа
+    if not os.getenv("GIGACHAT_API_KEY") and not os.getenv("GIGACHAT_CLIENT_SECRET"):
+        print("⚠️  Не найден ключ GigaChat API!")
+        print("Создайте файл .env и добавьте:")
+        print("  GIGACHAT_CLIENT_SECRET=ваш_client_secret")
+        print("  GIGACHAT_AUTH_DATA=ваши_auth_данные")
+        return False
 
     return True
 
@@ -45,6 +49,7 @@ def main():
     """Основная функция запуска"""
     print("=" * 50)
     print("🏫 Умная библиотека учебников")
+    print("🤖 Версия с системой из 5 агентов на GigaChat")
     print("=" * 50)
     print("📁 Максимальный размер файла: 50MB")
     print("=" * 50)
@@ -55,13 +60,13 @@ def main():
         sys.exit(1)
 
     # Токен бота
-    BOT_TOKEN = 'BOT_TOKEN'
+    BOT_TOKEN = '8299643533:AAFSCcKODXOm6eI7LT5FMMOFpJqXMfwikko'
 
-    if not BOT_TOKEN or BOT_TOKEN == 'YOUR_BOT_TOKEN_HERE':
-        print("\n❌ Укажите действительный токен Telegram бота в файле main.py")
+    if not BOT_TOKEN or BOT_TOKEN == 'Ваш_токен':
+        print("\n❌ Укажите действительный токен Telegram бота")
         sys.exit(1)
 
-    # Запускаем бота
+    # Запускаем бота только с системой агентовн
     try:
         bot = LibraryBot(BOT_TOKEN)
         bot.start()
@@ -73,79 +78,5 @@ def main():
         traceback.print_exc()
 
 
-def analyze_example_pdf():
-    """Функция для тестирования анализа PDF файла"""
-    from library_core import BookAnalyzer
-
-    print("\n🔬 Тестирование анализа PDF...")
-    print("=" * 50)
-
-    analyzer = BookAnalyzer()
-
-    # Пример анализа файла
-    test_pdf = "example.pdf"
-
-    if os.path.exists(test_pdf):
-        print(f"Анализирую файл: {test_pdf}")
-
-        # Проверяем размер файла
-        file_size = os.path.getsize(test_pdf)
-        if file_size > 50 * 1024 * 1024:
-            print(f"❌ Файл слишком большой: {file_size / (1024 * 1024):.1f}MB (максимум 50MB)")
-            return
-
-        book_data = analyzer.analyze_book(test_pdf)
-
-        if book_data:
-            print("\n✅ Анализ завершен успешно!")
-            print(f"ID книги: {book_data.book_id}")
-            print(f"Область знаний: {book_data.area}")
-            print(f"Найденные теги:")
-
-            for category, tags in book_data.tags.items():
-                if tags:
-                    print(f"  {category}: {', '.join(tags)}")
-
-            # Сохраняем в базу
-            analyzer.save_to_database(book_data)
-            print(f"\n💾 Данные сохранены в analyzed_books.xlsx")
-        else:
-            print("❌ Не удалось проанализировать файл")
-    else:
-        print(f"❌ Тестовый файл не найден: {test_pdf}")
-        print("\nСоздайте example.pdf или укажите путь к существующему PDF:")
-        print("  python main.py --test /путь/к/файлу.pdf")
-
-
 if __name__ == "__main__":
-    # Можно запустить в двух режимах:
-    # 1. Режим бота (по умолчанию)
-    # 2. Режим тестирования анализа PDF
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--test":
-        if len(sys.argv) > 2:
-            # Переопределяем путь к тестовому файлу
-            import sys
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-            test_pdf = sys.argv[2]
-            if os.path.exists(test_pdf):
-                from library_core import BookAnalyzer
-
-                print("\n🔬 Тестирование анализа PDF...")
-                print(f"Файл: {test_pdf}")
-
-                analyzer = BookAnalyzer()
-                book_data = analyzer.analyze_book(test_pdf)
-
-                if book_data:
-                    print("\n✅ Анализ завершен успешно!")
-                    analyzer.save_to_database(book_data)
-                else:
-                    print("❌ Не удалось проанализировать файл")
-            else:
-                print(f"❌ Файл не найден: {test_pdf}")
-        else:
-            analyze_example_pdf()
-    else:
-        main()
+    main()
