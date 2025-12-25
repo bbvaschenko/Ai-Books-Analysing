@@ -1,0 +1,40 @@
+{
+  "system_info": {
+    "created": "2025-12-25T05:05:50.144769",
+    "version": "1.0",
+    "description": "Метаданные системы управления книгами"
+  },
+  "statistics": {
+    "total_books": 2,
+    "total_tags": 4,
+    "total_summaries": 1,
+    "last_update": "2025-12-25T05:07:07.825002"
+  },
+  "categories": {
+    "academic_subjects": [],
+    "genres": [],
+    "audience_levels": [],
+    "complexity_levels": [],
+    "formats": []
+  },
+  "processing_history": [
+    {
+      "timestamp": "2025-12-25T05:07:07.760293",
+      "books_count": 1,
+      "summaries_count": 0,
+      "tags_count": 2
+    },
+    {
+      "timestamp": "2025-12-25T05:07:07.775418",
+      "books_count": 1,
+      "summaries_count": 1,
+      "tags_count": 2
+    },
+    {
+      "timestamp": "2025-12-25T05:07:07.825016",
+      "books_count": 2,
+      "summaries_count": 1,
+      "tags_count": 4
+    }
+  ]
+}
